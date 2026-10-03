@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+> **This is the Stackly Hosting fork of ESPectre** (`stacklyhosting-byte/spectr-espectre`),
+> pinned to the MQTT-based Micro-ESPectre architecture at tag `2.8.0` plus documented
+> local changes. See [PROVENANCE.md](PROVENANCE.md) for the exact base commit and the
+> full modification list, and [SOURCE-OFFER.md](SOURCE-OFFER.md) for the GPLv3 source
+> offer. Licensed under GPLv3 — see [LICENSE](LICENSE). This fork is not affiliated
+> with or endorsed by the ESPectre project.
+
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/francescopace/espectre/blob/main/LICENSE)
 [![ESPHome](https://img.shields.io/badge/ESPHome-Component-blue.svg)](https://esphome.io/)
 [![Platform](https://img.shields.io/badge/platform-ESP32-red.svg)](https://www.espressif.com/en/products/socs)

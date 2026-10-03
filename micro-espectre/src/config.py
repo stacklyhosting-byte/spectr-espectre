@@ -52,7 +52,7 @@ DETECTION_ALGORITHM = "mvs"
 
 # Band Calibration Configuration (used when SELECTED_SUBCARRIERS is None)
 # NBVI: Normalized Band Variance Index (12 non-consecutive subcarriers)
-CALIBRATION_NUM_WINDOWS = 10   # Number of windows worth of packets to collect
+CALIBRATION_NUM_WINDOWS = 5   # Number of windows worth of packets to collect
 # CALIBRATION_BUFFER_SIZE calculated after SEG_WINDOW_SIZE is defined
 
 # Segmentation Parameters
@@ -69,7 +69,7 @@ SEG_WINDOW_SIZE_MAX = 200     # Maximum window size
 CALIBRATION_BUFFER_SIZE = CALIBRATION_NUM_WINDOWS * SEG_WINDOW_SIZE
 
 # Low-pass filter (removes high-frequency noise, reduces false positives)
-ENABLE_LOWPASS_FILTER = False   # Recommended: reduces FP in noisy environments
+ENABLE_LOWPASS_FILTER = True    # Recommended: reduces FP in noisy environments
 LOWPASS_CUTOFF = 11.0          # Cutoff frequency in Hz (11 Hz: 2.3% FP, 92.4% Recall)
                                # Human movement is typically 0.5-10 Hz, RF noise is >15 Hz
 

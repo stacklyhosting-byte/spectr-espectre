@@ -25,6 +25,9 @@ GAIN_LOCK_PACKETS = 300  # ~3 seconds at 100 Hz
 from src.config import NUM_SUBCARRIERS, EXPECTED_CSI_LEN, SEG_THRESHOLD
 from src.utils import to_signed_int8, calculate_median, normalize_ht20_csi_payload
 
+# Pre-created WLAN object (avoids constructor failure on some ESP32 variants)
+_WLAN_PRE = None
+
 # Global state for calibration mode and performance metrics
 class GlobalState:
     def __init__(self):
@@ -92,12 +95,23 @@ def print_wifi_status(wlan):
     print(f"WiFi connected - IP: {ip}, Protocol: {protocol_str}, Bandwidth: {bw_str}, Promiscuous: {prom_str}")
 
 def connect_wifi():
-    """Connect to WiFi"""
+    """Connect to WiFi (idempotent — skips if already connected)"""
+    
+    # Use pre-created WLAN if available (avoids constructor failure on S3)
+    global _WLAN_PRE
+    if _WLAN_PRE is not None:
+        wlan = _WLAN_PRE
+    else:
+        wlan = network.WLAN(network.STA_IF)
+    
+    if wlan.isconnected():
+        print(f"WiFi already connected: {wlan.ifconfig()[0]}")
+        print_wifi_status(wlan)
+        return wlan
     
     print(f"Activating WiFi interface...")
     
     gc.collect()
-    wlan = network.WLAN(network.STA_IF)
     
     # Force cleanup of any stale state from previous interrupted run
     cleanup_wifi(wlan)
@@ -549,43 +563,55 @@ def get_chip_type():
     return machine
 
 
-def main():
-    """Main application loop"""
+def main(pre_wlan=None):
+    """Main application loop
+    
+    Args:
+        pre_wlan: Optional pre-created WLAN object (avoids constructor
+                  failure on some ESP32 variants during cold boot)
+    """
+    global _WLAN_PRE
+    if pre_wlan is not None:
+        _WLAN_PRE = pre_wlan
+    
     print('Micro-ESPectre starting...')
     
     # Detect chip type
     g_state.chip_type = get_chip_type()
     print(f'Detected chip: {g_state.chip_type}')
     
+    # Force GC before WiFi
+    gc.collect()
+    
     # Connect to WiFi
     wlan = connect_wifi()
     
-    # Initialize detector based on configured algorithm
-    detection_algorithm = getattr(config, 'DETECTION_ALGORITHM', 'mvs').lower()
+    # Initialize dual detectors: MVS (decision-maker) + ML (logging only)
     initial_threshold = getattr(config, 'SEG_THRESHOLD', 1.0)
     
-    if detection_algorithm == 'ml':
-        print(f'Detection algorithm: ML (Neural Network)')
-        detector = MLDetector(
-            window_size=config.SEG_WINDOW_SIZE,
-            threshold=ML_DEFAULT_THRESHOLD,
-            enable_lowpass=config.ENABLE_LOWPASS_FILTER,
-            lowpass_cutoff=config.LOWPASS_CUTOFF,
-            enable_hampel=config.ENABLE_HAMPEL_FILTER,
-            hampel_window=config.HAMPEL_WINDOW,
-            hampel_threshold=config.HAMPEL_THRESHOLD
-        )
-    else:
-        print(f'Detection algorithm: MVS (Moving Variance Segmentation)')
-        detector = MVSDetector(
-            window_size=config.SEG_WINDOW_SIZE,
-            threshold=initial_threshold if isinstance(initial_threshold, (int, float)) else 1.0,
-            enable_lowpass=config.ENABLE_LOWPASS_FILTER,
-            lowpass_cutoff=config.LOWPASS_CUTOFF,
-            enable_hampel=config.ENABLE_HAMPEL_FILTER,
-            hampel_window=config.HAMPEL_WINDOW,
-            hampel_threshold=config.HAMPEL_THRESHOLD
-        )
+    print(f'Detection algorithm: MVS + ML (dual)')
+    print(f'  MVS: decision-maker for alerts')
+    print(f'  ML: logging only (score in telemetry)')
+    
+    mvs_detector = MVSDetector(
+        window_size=config.SEG_WINDOW_SIZE,
+        threshold=initial_threshold if isinstance(initial_threshold, (int, float)) else 1.0,
+        enable_lowpass=config.ENABLE_LOWPASS_FILTER,
+        lowpass_cutoff=config.LOWPASS_CUTOFF,
+        enable_hampel=config.ENABLE_HAMPEL_FILTER,
+        hampel_window=config.HAMPEL_WINDOW,
+        hampel_threshold=config.HAMPEL_THRESHOLD
+    )
+    
+    ml_detector = MLDetector(
+        window_size=config.SEG_WINDOW_SIZE,
+        threshold=ML_DEFAULT_THRESHOLD,
+        enable_lowpass=config.ENABLE_LOWPASS_FILTER,
+        lowpass_cutoff=config.LOWPASS_CUTOFF,
+        enable_hampel=config.ENABLE_HAMPEL_FILTER,
+        hampel_window=config.HAMPEL_WINDOW,
+        hampel_threshold=config.HAMPEL_THRESHOLD
+    )
     
     # Initialize and start traffic generator (rate is static from config.py)
     gc.collect()  # Free memory before creating socket
@@ -636,13 +662,15 @@ def main():
     needs_calibration = not current_subcarriers
     
     if needs_calibration:
-        # Set default fallback before calibration
-        run_band_calibration(wlan, detector, traffic_gen, g_state.chip_type)
+        # Calibrate MVS (gain lock + NBVI) — sets SELECTED_SUBCARRIERS and threshold
+        run_band_calibration(wlan, mvs_detector, traffic_gen, g_state.chip_type)
+        # Sync ML detector with calibration results
+        ml_detector.set_cv_normalization(g_state.needs_cv_normalization)
     else:
         print(f'Using configured subcarriers: {config.SELECTED_SUBCARRIERS}')
     
-    # Initialize MQTT (pass calibration function for factory_reset and global state for metrics)
-    mqtt_handler = MQTTHandler(config, detector, wlan, traffic_gen, run_band_calibration, g_state)
+    # Initialize MQTT (pass both detectors)
+    mqtt_handler = MQTTHandler(config, mvs_detector, wlan, traffic_gen, run_band_calibration, g_state, ml_detector)
     mqtt_handler.connect()
     
     # Publish info after boot (always, to show current configuration)
@@ -715,8 +743,9 @@ def main():
                 
                 del frame
                 
-                # Process packet through detector interface
-                detector.process_packet(csi_data, config.SELECTED_SUBCARRIERS)
+                # Process packet through both detectors
+                mvs_detector.process_packet(csi_data, config.SELECTED_SUBCARRIERS)
+                ml_detector.process_packet(csi_data, config.SELECTED_SUBCARRIERS)
 
                 # Poll MQTT commands every 10 packets to reduce hot-loop overhead
                 # without making command responsiveness noticeable to users.
@@ -738,8 +767,10 @@ def main():
                         runtime_policy.reset()
                     g_state.current_channel = packet_channel
                     
-                    metrics = detector.update_state()
-                    effective_state, _ = runtime_policy.apply_state(metrics['state'])
+                    # Update both detectors
+                    mvs_metrics = mvs_detector.update_state()
+                    ml_metrics = ml_detector.update_state()
+                    effective_state, _ = runtime_policy.apply_state(mvs_metrics['state'])
                     runtime_policy.after_evaluation()
 
                     if should_publish:
@@ -754,17 +785,14 @@ def main():
                         last_dropped = dropped
                         
                         state_str = 'MOTION' if effective_state == 1 else 'IDLE'
-                        motion_metric = metrics.get('moving_variance', metrics.get('jitter', metrics.get('probability', 0)))
-                        threshold = metrics['threshold']
-                        is_ml = 'probability' in metrics
-                        # For ML, motion_metric and threshold are both on the detector's 0-10 scale.
-                        if is_ml:
-                            progress = motion_metric
-                        else:
-                            progress = motion_metric / threshold if threshold > 0 else 0
-                        progress_bar = format_progress_bar(progress, threshold, is_probability=is_ml)
+                        motion_metric = mvs_metrics.get('moving_variance', mvs_metrics.get('jitter', 0))
+                        threshold = mvs_metrics['threshold']
+                        ml_score = ml_metrics.get('probability', 0)
+                        
+                        progress = motion_metric / threshold if threshold > 0 else 0
+                        progress_bar = format_progress_bar(progress, threshold, is_probability=False)
                         print(f"{progress_bar} | pkts:{publish_counter} drop:{dropped_delta} pps:{pps} | "
-                              f"mvmt:{motion_metric:.4f} thr:{threshold:.4f} | {state_str}")
+                              f"mvmt:{motion_metric:.4f} thr:{threshold:.4f} ml:{ml_score:.2f} | {state_str}")
                         
                         mqtt_handler.publish_state(
                             motion_metric,
@@ -772,7 +800,9 @@ def main():
                             threshold,
                             publish_counter,
                             dropped_delta,
-                            pps
+                            pps,
+                            mvs_metrics.get('turbulence', 0),
+                            ml_score
                         )
                         publish_counter = 0
                         last_publish_time = current_time

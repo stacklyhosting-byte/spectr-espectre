@@ -26,23 +26,25 @@ ML_DEFAULT_THRESHOLD = 5.0
 class MQTTCommands:
     """MQTT command processor"""
     
-    def __init__(self, mqtt_client, config, detector, response_topic, wlan, traffic_generator=None, band_calibration_func=None, global_state=None):
+    def __init__(self, mqtt_client, config, detector, response_topic, wlan, traffic_generator=None, band_calibration_func=None, global_state=None, ml_detector=None):
         """
         Initialize MQTT commands
         
         Args:
             mqtt_client: MQTT client instance
             config: Configuration module
-            detector: IDetector instance (MVSDetector or MLDetector)
+            detector: IDetector instance (MVSDetector — decision-maker)
             response_topic: MQTT topic for responses
             wlan: wlan instance
             traffic_generator: TrafficGenerator instance (optional)
             band_calibration_func: Function to run band calibration (optional)
             global_state: GlobalState instance for accessing loop metrics (optional)
+            ml_detector: MLDetector instance (logging only, optional)
         """
         self.mqtt = mqtt_client
         self.config = config
         self.detector = detector
+        self.ml_detector = ml_detector
         self.wlan = wlan
         self.traffic_gen = traffic_generator
         self.band_calibration_func = band_calibration_func
@@ -50,21 +52,20 @@ class MQTTCommands:
         self.response_topic = response_topic
         self.start_time = time.time()
         
-        # Check detector type for MVS-specific features
+        # Primary detector is always MVS in dual mode
         self._is_mvs = detector.get_name() == "MVS"
     
     def _get_detection_info(self):
         """Build detection info dict based on detector type."""
         algorithm = self.detector.get_name()
+        ml_enabled = self.ml_detector is not None
         
-        # Determine calibrator based on detector type
-        if algorithm == "MVS":
-            calibrator = getattr(self.config, 'CALIBRATION_ALGORITHM', 'nbvi')
-        else:  # ML
-            calibrator = "none"
+        # Determine calibrator
+        calibrator = getattr(self.config, 'CALIBRATION_ALGORITHM', 'nbvi')
         
         info = {
             "algorithm": algorithm,
+            "ml_enabled": ml_enabled,
             "calibrator": calibrator,
             "publish_interval": getattr(self.config, 'PUBLISH_INTERVAL', 100),
             "evaluation_interval": getattr(self.config, 'EVALUATION_INTERVAL', 25),
@@ -72,7 +73,7 @@ class MQTTCommands:
             "motion_off_hits": getattr(self.config, 'MOTION_OFF_HITS', 3),
         }
         # Add MVS-specific parameters
-        if self._is_mvs:
+        if algorithm == "MVS":
             info["threshold"] = round(self.detector.get_threshold(), 4)
             info["threshold_source"] = "config" if getattr(self.config, 'SEG_THRESHOLD', None) is not None else "auto"
             info["window_size"] = self.detector._context.window_size
@@ -332,18 +333,22 @@ class MQTTCommands:
         """Reset all parameters to defaults and trigger re-calibration"""
         print("Factory reset requested")
         
-        # Reset detector
+        # Reset MVS detector (decision-maker)
         self.detector.reset()
-        self.detector.set_threshold(1.0 if self._is_mvs else ML_DEFAULT_THRESHOLD)
+        self.detector.set_threshold(1.0)
         
         # Reset MVS-specific parameters
-        if self._is_mvs:
-            ctx = self.detector._context
-            ctx.window_size = SEG_WINDOW_SIZE
-            ctx.turbulence_buffer = [0.0] * ctx.window_size
-            ctx.buffer_index = 0
-            ctx.buffer_count = 0
-            ctx.current_moving_variance = 0.0
+        ctx = self.detector._context
+        ctx.window_size = SEG_WINDOW_SIZE
+        ctx.turbulence_buffer = [0.0] * ctx.window_size
+        ctx.buffer_index = 0
+        ctx.buffer_count = 0
+        ctx.current_moving_variance = 0.0
+
+        # Reset ML detector (logging only)
+        if self.ml_detector:
+            self.ml_detector.reset()
+            self.ml_detector.set_threshold(ML_DEFAULT_THRESHOLD)
 
         print("Factory reset complete")
         
@@ -355,15 +360,16 @@ class MQTTCommands:
             # Get chip_type from global_state if available
             chip_type = getattr(self.global_state, 'chip_type', None) if self.global_state else None
             
-            # Run calibration with detector
+            # Run calibration with MVS detector (sets subcarriers + threshold)
             success = self.band_calibration_func(self.wlan, self.detector, self.traffic_gen, chip_type)
             
+            # Sync ML detector with calibration results
+            if self.ml_detector and self.global_state:
+                self.ml_detector.set_cv_normalization(self.global_state.needs_cv_normalization)
+            
             if success:
-                if self._is_mvs:
-                    band = getattr(self.config, 'SELECTED_SUBCARRIERS')
-                    self.send_response(f"Re-calibration successful! Band: {band}")
-                else:
-                    self.send_response(f"Re-calibration successful! Threshold: {self.detector.get_threshold():.4f}")
+                band = getattr(self.config, 'SELECTED_SUBCARRIERS')
+                self.send_response(f"Re-calibration successful! Band: {band}")
             else:
                 self.send_response(f"Re-calibration failed. Using default settings.")
         else:

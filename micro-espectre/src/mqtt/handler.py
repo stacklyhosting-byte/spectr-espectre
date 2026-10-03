@@ -16,20 +16,22 @@ from src.mqtt.commands import MQTTCommands
 class MQTTHandler:
     """MQTT handler with publishing and command support"""
     
-    def __init__(self, config, detector, wlan, traffic_generator=None, band_calibration_func=None, global_state=None):
+    def __init__(self, config, detector, wlan, traffic_generator=None, band_calibration_func=None, global_state=None, ml_detector=None):
         """
         Initialize MQTT handler
         
         Args:
             config: Configuration module
-            detector: IDetector instance (MVSDetector or MLDetector)
+            detector: IDetector instance (MVSDetector — decision-maker)
             wlan: WLAN instance
             traffic_generator: TrafficGenerator instance (optional)
             band_calibration_func: Function to run band calibration (optional)
             global_state: GlobalState instance for accessing loop metrics (optional)
+            ml_detector: MLDetector instance for logging-only ML scores (optional)
         """
         self.config = config
         self.detector = detector
+        self.ml_detector = ml_detector
         self.wlan = wlan
         self.traffic_gen = traffic_generator
         self.band_calibration_func = band_calibration_func
@@ -60,7 +62,7 @@ class MQTTHandler:
         self.client.connect()
         print('MQTT connected')
         
-        # Initialize command handler
+        # Initialize command handler (pass ML detector so factory_reset resets both)
         self.cmd_handler = MQTTCommands(
             self.client,
             self.config,
@@ -69,7 +71,8 @@ class MQTTHandler:
             self.wlan,
             self.traffic_gen,
             self.band_calibration_func,
-            self.global_state
+            self.global_state,
+            self.ml_detector
         )
         
         # Set callback for incoming messages
@@ -101,17 +104,19 @@ class MQTTHandler:
             print(f"Error checking MQTT messages: {e}")
     
     def publish_state(self, current_variance, current_state, current_threshold, 
-                     packet_delta, dropped_delta, pps):
+                     packet_delta, dropped_delta, pps, turbulence=0, ml_score=0):
         """
         Publish current state to MQTT
         
         Args:
-            current_variance: Current moving variance (or probability for ML)
+            current_variance: Current moving variance (MVS)
             current_state: Current state (0=IDLE, 1=MOTION)
             current_threshold: Current threshold
             packet_delta: Packets processed since last publish
             dropped_delta: Packets dropped since last publish
             pps: Packets per second
+            turbulence: Current spatial turbulence value
+            ml_score: ML detector score (0.0-10.0 scale, 0 = not running)
         """
         state_str = 'motion' if current_state == 1 else 'idle'
         
@@ -122,8 +127,29 @@ class MQTTHandler:
             'packets_processed': packet_delta,
             'packets_dropped': dropped_delta,
             'pps': pps,
+            'turbulence': round(turbulence, 4),
             'timestamp': time.time()
         }
+        
+        # Add ML score when ML detector is active
+        if ml_score > 0:
+            payload['ml_score'] = round(ml_score, 4)
+        
+        # Add gain_lock status from global state
+        if self.global_state and hasattr(self.global_state, 'needs_cv_normalization'):
+            payload['gain_lock'] = not self.global_state.needs_cv_normalization
+        
+        # Add algorithm name from config
+        if hasattr(self.config, 'DETECTION_ALGORITHM'):
+            payload['algorithm'] = self.config.DETECTION_ALGORITHM
+        
+        # Get RSSI from WiFi interface if available
+        try:
+            rssi = self.wlan.status('rssi')
+            if rssi is not None:
+                payload['rssi'] = rssi
+        except:
+            pass
         
         try:
             self.client.publish(self.base_topic, json.dumps(payload))
