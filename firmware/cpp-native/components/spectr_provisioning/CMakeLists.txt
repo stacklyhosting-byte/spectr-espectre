@@ -1,0 +1,18 @@
+idf_component_register(
+    SRCS
+        "spectr_provisioning_portal.cpp"
+    INCLUDE_DIRS
+        "."
+    EMBED_FILES
+        "portal.html"
+    REQUIRES
+        espectre
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
+        esp_http_server
+        lwip
+        freertos
+        esp_timer
+)

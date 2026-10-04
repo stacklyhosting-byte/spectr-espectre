@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spectr sensor setup</title>
+<style>
+  :root {
+    --ink: #17181a;
+    --ink-secondary: #4d5158;
+    --ink-muted: #8a8f98;
+    --base: #ffffff;
+    --panel: #f6f5f3;
+    --hairline: #e6e3df;
+    --signal: #e8763a;
+    --signal-soft: rgba(232, 118, 58, 0.12);
+    --danger: #b42318;
+    --ok: #1b7a4b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.45;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 28px 18px 48px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .brand svg { flex: none; }
+  .brand b { font-size: 15px; letter-spacing: 0.02em; }
+  h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+  p.lead { margin: 0 0 20px; color: var(--ink-secondary); font-size: 14px; }
+  .card {
+    background: var(--base);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; padding: 4px 0; }
+  .kv span:first-child { color: var(--ink-muted); }
+  .kv code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    background: var(--base);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .btn:hover { border-color: var(--ink-muted); }
+  .btn.primary { background: var(--signal-soft); border-color: rgba(232, 118, 58, 0.5); color: var(--signal); font-weight: 600; }
+  .btn.primary:hover { background: rgba(232, 118, 58, 0.2); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type="text"], input[type="password"], select {
+    width: 100%;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    background: var(--base);
+    color: var(--ink);
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--signal); }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); margin-bottom: 6px; }
+  .networks { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+  .networks li {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .networks li:hover { border-color: var(--ink-muted); }
+  .networks li.selected { border-color: rgba(232, 118, 58, 0.6); background: var(--signal-soft); }
+  .networks .name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .networks .meta { font-size: 12px; color: var(--ink-muted); font-family: ui-monospace, Menlo, monospace; }
+  .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-left: 8px; }
+  .bars i { width: 3px; background: var(--ink-muted); border-radius: 1px; }
+  .bars i.on { background: var(--signal); }
+  .status { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .status.error { color: var(--danger); }
+  .status.ok { color: var(--ok); }
+  .status.busy { color: var(--ink-secondary); }
+  .advanced-toggle { font-size: 13px; color: var(--ink-secondary); background: none; border: none; cursor: pointer; padding: 4px 0; text-decoration: underline; }
+  .advanced { display: none; margin-top: 12px; }
+  .advanced.open { display: block; }
+  .preview {
+    display: none;
+    border: 1px solid rgba(232, 118, 58, 0.4);
+    background: var(--signal-soft);
+    color: var(--signal);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  footer { color: var(--ink-muted); font-size: 12px; margin-top: 18px; }
+  .muted { color: var(--ink-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <circle cx="13" cy="13" r="2.4" fill="#E8763A" />
+      <path d="M13 6.2a6.8 6.8 0 0 1 6.8 6.8" stroke="#E8763A" stroke-width="1.7" stroke-linecap="round" opacity="0.75"/>
+      <path d="M13 2.4a10.6 10.6 0 0 1 10.6 10.6" stroke="#E8763A" stroke-width="1.7" stroke-linecap="round" opacity="0.4"/>
+      <path d="M13 19.8A6.8 6.8 0 0 1 6.2 13" stroke="#E8763A" stroke-width="1.7" stroke-linecap="round" opacity="0.75"/>
+      <path d="M13 23.6A10.6 10.6 0 0 1 2.4 13" stroke="#E8763A" stroke-width="1.7" stroke-linecap="round" opacity="0.4"/>
+    </svg>
+    <b>Spectr</b>
+  </div>
+
+  <h1>Set up your sensor</h1>
+  <p class="lead">Connect this sensor to your home Wi-Fi. It will restart and start sensing on its own.</p>
+
+  <div class="preview" id="preview">Preview mode — this page is shown without a sensor. Actions are disabled.</div>
+
+  <div class="card">
+    <h2>This sensor</h2>
+    <div class="kv"><span>Device ID</span><code id="device-id">…</code></div>
+    <div class="kv"><span>Setup hotspot</span><code id="ap-ssid">…</code></div>
+    <div class="kv"><span>Hotspot password</span><code id="ap-password">…</code></div>
+    <p class="muted" id="ap-hint" style="margin: 10px 0 0;">The hotspot password is also printed on the sensor label.</p>
+  </div>
+
+  <div class="card">
+    <h2>1 · Choose your Wi-Fi</h2>
+    <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <span class="muted" id="scan-hint">Scanning…</span>
+      <button class="btn" id="rescan" type="button">Scan again</button>
+    </div>
+    <ul class="networks" id="networks"></ul>
+  </div>
+
+  <div class="card">
+    <h2>2 · Enter the password</h2>
+    <label class="field">
+      <small>Wi-Fi password</small>
+      <input type="password" id="wifi-password" autocomplete="off" placeholder="Your Wi-Fi password" />
+    </label>
+    <label class="field">
+      <small>Sensor name (optional)</small>
+      <input type="text" id="sensor-name" placeholder="e.g. Living room" maxlength="32" />
+    </label>
+    <div class="row">
+      <button class="btn primary" id="connect" type="button">Connect sensor</button>
+    </div>
+    <div class="status" id="status"></div>
+
+    <button class="advanced-toggle" id="advanced-toggle" type="button">Advanced: MQTT broker settings</button>
+    <div class="advanced" id="advanced">
+      <label class="field"><small>MQTT host</small><input type="text" id="mqtt-host" placeholder="185.213.25.28" /></label>
+      <label class="field"><small>MQTT port</small><input type="text" id="mqtt-port" placeholder="1883" inputmode="numeric" /></label>
+      <label class="field"><small>Scheme</small>
+        <select id="mqtt-scheme">
+          <option value="">(keep default)</option>
+          <option value="mqtt">mqtt</option>
+          <option value="mqtts">mqtts</option>
+        </select>
+      </label>
+      <label class="field"><small>Username</small><input type="text" id="mqtt-username" /></label>
+      <label class="field"><small>Password</small><input type="password" id="mqtt-password" autocomplete="off" /></label>
+      <label class="field"><small>Topic prefix</small><input type="text" id="topic-prefix" placeholder="espectre/v1/devices" /></label>
+    </div>
+  </div>
+
+  <footer>
+    After the sensor connects it restarts into sensing mode. Then open the Spectr app, choose
+    “Add sensor”, and claim it with the device ID shown above.
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var state = { networks: [], selected: null, preview: false };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var setStatus = function (text, cls) {
+    var el = $("status");
+    el.textContent = text || "";
+    el.className = "status" + (cls ? " " + cls : "");
+  };
+  var showPreview = function () {
+    state.preview = true;
+    $("preview").style.display = "block";
+    $("device-id").textContent = "a1b2c3d4e5f60718";
+    $("ap-ssid").textContent = "Spectr-0718";
+    $("ap-password").textContent = "K7MQP4XR9T";
+    state.networks = [
+      { ssid: "HomeWiFi", rssi: -46, channel: 6, secure: true },
+      { ssid: "HomeWiFi-5G", rssi: -61, channel: 44, secure: true },
+      { ssid: "Guest", rssi: -74, channel: 1, secure: false },
+    ];
+    renderNetworks();
+    setStatus("Preview mode — connect a real sensor to use this page.", "");
+  };
+  var api = function (path, options) {
+    return fetch(path, options).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (body) {
+        if (!response.ok || body.ok === false) {
+          throw new Error(body.error || ("Request failed (" + response.status + ")"));
+        }
+        return body;
+      });
+    });
+  };
+
+  var signalBars = function (rssi) {
+    var level = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
+    var html = '<span class="bars">';
+    for (var i = 1; i <= 4; i++) {
+      html += '<i class="' + (i <= level ? "on" : "") + '" style="height:' + (3 + i * 2) + 'px"></i>';
+    }
+    return html + "</span>";
+  };
+
+  function renderNetworks() {
+    var list = $("networks");
+    list.innerHTML = "";
+    if (!state.networks.length) {
+      list.innerHTML = '<li style="cursor:default"><span class="muted">No networks found. Try scanning again.</span></li>';
+      return;
+    }
+    state.networks.forEach(function (network) {
+      var li = document.createElement("li");
+      if (state.selected === network.ssid) li.className = "selected";
+      li.innerHTML =
+        '<span class="name">' + escapeHtml(network.ssid) + (network.secure ? " 🔒" : "") + "</span>" +
+        '<span class="meta">' + signalBars(network.rssi) + " " + network.rssi + " dBm</span>";
+      li.addEventListener("click", function () {
+        state.selected = network.ssid;
+        renderNetworks();
+        $("wifi-password").focus();
+      });
+      list.appendChild(li);
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function scan() {
+    if (state.preview) return;
+    $("scan-hint").textContent = "Scanning…";
+    $("rescan").disabled = true;
+    api("/scan")
+      .then(function (body) {
+        state.networks = (body.networks || []).slice().sort(function (a, b) { return b.rssi - a.rssi; });
+        renderNetworks();
+        $("scan-hint").textContent = state.networks.length + " networks found";
+      })
+      .catch(function (error) {
+        $("scan-hint").textContent = "Scan failed";
+        setStatus(error.message, "error");
+      })
+      .finally(function () { $("rescan").disabled = false; });
+  }
+
+  function connect() {
+    if (state.preview) return;
+    if (!state.selected) { setStatus("Choose your Wi-Fi network first.", "error"); return; }
+    var password = $("wifi-password").value;
+    if (password && password.length < 8) { setStatus("Wi-Fi passwords are at least 8 characters.", "error"); return; }
+
+    var params = new URLSearchParams();
+    params.set("ssid", state.selected);
+    params.set("password", password);
+    var name = $("sensor-name").value.trim();
+    if (name) params.set("label", name);
+    var mqttHost = $("mqtt-host").value.trim();
+    if (mqttHost) {
+      params.set("mqtt_host", mqttHost);
+      params.set("mqtt_port", $("mqtt-port").value.trim());
+      params.set("mqtt_scheme", $("mqtt-scheme").value);
+      params.set("mqtt_username", $("mqtt-username").value);
+      params.set("mqtt_password", $("mqtt-password").value);
+      params.set("topic_prefix", $("topic-prefix").value.trim());
+    }
+
+    $("connect").disabled = true;
+    setStatus("Connecting to “" + state.selected + "”… this can take up to 30 seconds.", "busy");
+    api("/save", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    })
+      .then(function () {
+        setStatus("Connected. The sensor is restarting — it will appear in the Spectr app shortly.", "ok");
+      })
+      .catch(function (error) {
+        setStatus(error.message, "error");
+        $("connect").disabled = false;
+      });
+  }
+
+  $("rescan").addEventListener("click", scan);
+  $("connect").addEventListener("click", connect);
+  $("advanced-toggle").addEventListener("click", function () {
+    $("advanced").classList.toggle("open");
+  });
+
+  api("/status")
+    .then(function (body) {
+      $("device-id").textContent = body.device_id || "unknown";
+      $("ap-ssid").textContent = body.ap_ssid || "unknown";
+      $("ap-password").textContent = body.ap_password || "unknown";
+      if (body.label) $("sensor-name").value = body.label;
+      if (body.mqtt_host) {
+        $("mqtt-host").value = body.mqtt_host;
+        $("mqtt-port").value = body.mqtt_port || "";
+        $("mqtt-scheme").value = body.mqtt_scheme || "";
+        $("mqtt-username").value = body.mqtt_username || "";
+        $("topic-prefix").value = body.topic_prefix || "";
+        if (body.mqtt_host) $("advanced").classList.add("open");
+      }
+      scan();
+    })
+    .catch(function () { showPreview(); });
+})();
+</script>
+</body>
+</html>

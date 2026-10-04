@@ -1,0 +1,8 @@
+build/
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults.build
+sdkconfig.spectr-defaults-hash
+managed_components/
+.cache/
+tools/node_modules/
