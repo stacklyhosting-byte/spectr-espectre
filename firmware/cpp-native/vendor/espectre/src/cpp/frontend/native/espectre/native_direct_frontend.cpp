@@ -103,7 +103,7 @@ void NativeDirectFrontend::refresh() {
   wifi_response_pending_ = false;
   DirectHttpServiceConfig config = DirectHttpServiceConfig::for_first_party_portals();
   // Spectr: allow the Spectr app origins to use Direct HTTP (Local tools).
-  config.allowed_origins.push_back("https://micro-espectre-five.vercel.app");
+  config.allowed_origins.push_back("https://devspectr.vercel.app");
   config.allowed_origins.push_back("https://app.spectr.co.za");
   config.protocol_extension = owner_.command_capability_profile_(true).extension;
   config.device_id = owner_.device_config_.device_id;

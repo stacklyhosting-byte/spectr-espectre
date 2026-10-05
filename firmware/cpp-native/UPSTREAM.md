@@ -34,6 +34,7 @@ our GPLv3 corresponding-source obligation together with the published mirror.
 | 2026-10-04 | project config | `partitions.csv`: 16 MB layout with two 3.875 MB OTA application slots. |
 | 2026-10-04 | vendored code | `frontend/ota_protocol.cpp`: `espectre_ota_manifest_url()` points at the Spectr catalog (`https://firmware.spectr.co.za/<channel>/firmware-manifest-<channel>.json`) instead of the ESPectre GitHub releases. |
 | 2026-10-04 | provisioning fix | `components/spectr_provisioning/spectr_provisioning_portal.cpp`: create the default Wi-Fi **station** netif in setup mode (previously only the AP netif existed, so the candidate network associated but never obtained an IP). Firmware 1.0.1. |
+| 2026-10-05 | vendored code | `frontend/native/espectre/native_direct_frontend.cpp`: the Spectr app origin is now `https://devspectr.vercel.app` (Vercel project domain renamed); `https://app.spectr.co.za` stays. Firmware 1.0.4. |
 
 ## Re-sync procedure
 
