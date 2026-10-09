@@ -39,6 +39,8 @@ our GPLv3 corresponding-source obligation together with the published mirror.
 | 2026-10-09 | vendored code | `frontend/native/espectre/native_frontend.{h,cpp}`: runtime faults are now also published to MQTT (`fault` topic; previously SSE-only), and public accessors were added for the Spectr Link Health Monitor: `diagnostics()`, `mqtt_connected()`, and `publish_spectr_alert()` which publishes to `<prefix>/<device_id>/events`. |
 | 2026-10-09 | new component | `components/spectr_health/` (Spectr-original, GPLv3): Link Health Monitor — cumulative-delta link-health state machine (healthy/degraded/possible-interference/link-lost) with NVS-buffered MQTT alerts (`jamming_suspected`, `link_lost`, `link_degraded`, `link_restored`, `cloud_link_lost`). Conservative wording; never touches the sensing path. |
 | 2026-10-09 | app entry | `main/app_main.cpp`: instantiate the Link Health Monitor and pump it from the frontend loop task. Firmware 1.1.0. |
+| 2026-10-09 | vendored code | `runtime/esp_idf/csi_capture_service.{h,cpp}` + `runtime/esp_idf/csi_pipeline.h` + `runtime/runtime_snapshot.h` + `runtime/esp_idf/esp_idf_runtime.cpp`: record and expose the receiver noise floor (`rx_ctrl.noise_floor`) of every CSI callback as `RuntimeDiagnosticsSnapshot::Link::noise_floor_dbm`, for the Link Health Monitor's fast interference discriminator. |
+| 2026-10-09 | component | `components/spectr_health/`: two-tier Link Health Monitor — 1 Hz routine tier plus a 250 ms urgent tier (3 consecutive bad samples → provisional `link_lost`; interference evidence upgrades to `jamming_suspected`), alerts carrying `trigger`, `confidence`, `latency_ms`, `uptime_ms`, `noise_floor`. Firmware 1.2.0. |
 
 ## Re-sync procedure
 

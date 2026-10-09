@@ -12,6 +12,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 
 #include "csi_format_classifier.h"
 #include "csi_payload_normalizer.h"
@@ -58,6 +59,14 @@ class CsiCaptureService {
     return sanitized_first_word_packets_.load(std::memory_order_relaxed);
   }
   const CsiFormatAssessment &last_assessment() const { return last_assessment_; }
+  /**
+   * Spectr: noise floor of the most recent CSI callback, valid or rejected.
+   * INT8_MIN until a callback arrives. Freshness must be judged from the
+   * callback counter; the value holds when frames stop arriving.
+   */
+  int8_t last_noise_floor_dbm() const {
+    return last_noise_floor_dbm_.load(std::memory_order_relaxed);
+  }
   uint32_t enable_attempts() const { return enable_attempts_.load(std::memory_order_relaxed); }
   esp_err_t last_configure_err() const { return static_cast<esp_err_t>(last_configure_err_.load(std::memory_order_relaxed)); }
   esp_err_t last_set_callback_err() const {
@@ -102,6 +111,8 @@ class CsiCaptureService {
   std::atomic<uint32_t> invalid_estimate_packets_{0U};
   std::atomic<uint32_t> invalid_first_word_packets_{0U};
   std::atomic<uint32_t> sanitized_first_word_packets_{0U};
+  // Spectr: last receiver noise floor reported with any CSI callback.
+  std::atomic<int8_t> last_noise_floor_dbm_{INT8_MIN};
 
   std::atomic<uint32_t> enable_attempts_{0U};
   std::atomic<uint32_t> disable_attempts_{0U};

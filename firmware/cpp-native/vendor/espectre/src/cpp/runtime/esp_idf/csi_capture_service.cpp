@@ -224,6 +224,10 @@ void CsiCaptureService::record_format_drop_(CsiFormatReasonCode reason_code) {
 }
 
 void CsiCaptureService::process_packet(wifi_csi_info_t *data) {
+  // Spectr: record the receiver noise floor for every callback, valid or not.
+  // A jammer raises it even when the frame itself is unusable.
+  last_noise_floor_dbm_.store(static_cast<int8_t>(data->rx_ctrl.noise_floor),
+                              std::memory_order_relaxed);
   CsiFormatAssessment assessment = assess_ht20_sensing_format(data, capture_profile_);
   if (!assessment.is_sensing_accepted()) {
     last_assessment_ = assessment;

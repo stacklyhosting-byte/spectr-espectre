@@ -35,6 +35,12 @@ struct RuntimeDiagnosticsSnapshot {
     int8_t rssi_dbm{INT8_MIN};
     /** Primary channel of the current Wi-Fi association. Zero when unavailable. */
     uint8_t channel{0U};
+    /**
+     * Spectr: receiver noise floor of the most recent CSI callback, valid or
+     * rejected. `INT8_MIN` when unavailable. Holds the last value when frames
+     * stop; judge freshness from `csi.callbacks_total`.
+     */
+    int8_t noise_floor_dbm{INT8_MIN};
   };
   /** Internal generator and station traffic counters. */
   struct Traffic {

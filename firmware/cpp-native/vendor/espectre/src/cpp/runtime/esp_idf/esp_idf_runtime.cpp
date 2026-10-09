@@ -350,6 +350,7 @@ RuntimeDiagnosticsSnapshot EspIdfRuntime::get_diagnostics() const {
   RuntimeDiagnosticsSnapshot diagnostics = EspIdfRuntimeBase::get_diagnostics();
   diagnostics.link.rssi_dbm = wifi_rssi_dbm_;
   diagnostics.link.channel = wifi_channel_;
+  diagnostics.link.noise_floor_dbm = csi_pipeline_.capture_last_noise_floor_dbm();
   diagnostics.traffic.generator_packets_total = csi_traffic_service_.get_generator_packets_total();
   const NetworkTrafficSnapshot traffic = read_network_traffic();
   diagnostics.traffic.tx_packets_total = traffic.tx_packets;

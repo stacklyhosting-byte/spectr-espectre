@@ -259,6 +259,10 @@ class CsiPipeline {
   uint64_t capture_sanitized_first_word_total() const {
     return capture_service_.sanitized_first_word_packets();
   }
+  // Spectr: last receiver noise floor (INT8_MIN when no callback has arrived).
+  int8_t capture_last_noise_floor_dbm() const {
+    return capture_service_.last_noise_floor_dbm();
+  }
   uint64_t pending_frame_drops_total() const {
     return pending_frame_drops_.load(std::memory_order_relaxed);
   }
