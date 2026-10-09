@@ -246,7 +246,19 @@ void NativeFrontend::drain_pending_runtime_events_() {
 }
 
 void NativeFrontend::on_runtime_fault(const char *message) {
-  direct_frontend_->publish_event("fault", espectre_fault_payload(device_config_, message, now_ms_()));
+  const std::string payload = espectre_fault_payload(device_config_, message, now_ms_());
+  direct_frontend_->publish_event("fault", payload);
+  // Spectr: faults were SSE-only; surface them to the backend as well.
+  (void)mqtt_frontend_->publish_message("fault", payload, false);
+}
+
+bool NativeFrontend::mqtt_connected() const {
+  return mqtt_frontend_ != nullptr && mqtt_frontend_->connected();
+}
+
+bool NativeFrontend::publish_spectr_alert(const std::string &payload) {
+  if (mqtt_frontend_ == nullptr || !mqtt_frontend_->connected()) return false;
+  return mqtt_frontend_->publish_message("events", payload, false);
 }
 
 FrontendCommandResult NativeFrontend::dispatch_command_(const EspectreCommand &command, FrontendCommandOrigin origin,

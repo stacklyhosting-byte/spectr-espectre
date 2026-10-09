@@ -27,6 +27,7 @@
 #include "improv_serial_service.h"
 #include "ota_service_https.h"
 #include "primary_console.h"
+#include "spectr_health.h"
 #include "spectr_provisioning_portal.h"
 
 static const char *TAG = "espectre.native.app";
@@ -86,6 +87,7 @@ espectre::MdnsDiscoveryService *g_mdns_discovery = nullptr;
 espectre::MdnsBootstrapResponder *g_mdns_bootstrap_responder = nullptr;
 espectre::StandaloneWifiService g_wifi_manager;
 espectre::WifiProvisioningService g_wifi_provisioning(&g_wifi_manager);
+spectr::SpectrHealthMonitor g_health_monitor;
 
 const char *native_capabilities() {
   return "config,monitor,ota,peer_discovery,csi";
@@ -285,6 +287,7 @@ void espectre_loop_task(void *arg) {
     if (g_frontend != nullptr) {
       g_frontend->hold_pending_traffic_restart(g_wifi_manager.has_deferred_radio_work());
       g_frontend->loop();
+      g_health_monitor.loop(static_cast<uint32_t>(esp_timer_get_time() / 1000));
     }
 #if CONFIG_ESPECTRE_RECOVERY_BUTTON_ENABLED
     if (g_recovery_button != nullptr) {
@@ -425,6 +428,7 @@ extern "C" void app_main() {
     ESP_LOGE(TAG, "Failed to initialize ESPectre native frontend");
     return;
   }
+  g_health_monitor.begin(&frontend);
   g_wifi_provisioning.set_reconfigure_callbacks(
       []() {
         // Cancel pending bootstrap answers before the station is reconfigured.

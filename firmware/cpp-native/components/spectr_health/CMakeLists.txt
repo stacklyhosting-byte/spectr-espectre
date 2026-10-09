@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "spectr_health.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        espectre
+        nvs_flash
+        esp_timer
+        freertos
+)

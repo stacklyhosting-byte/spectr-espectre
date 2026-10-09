@@ -84,6 +84,11 @@ bool EspIdfMqttTransport::setup(const EspectreDeviceConfig &config) {
   mqtt_config.session.last_will.qos = 0;
   mqtt_config.session.last_will.retain = true;
   mqtt_config.outbox.limit = kMqttOutboxLimitBytes;
+  // Spectr: fast link-loss detection. esp-mqtt defaults (120 s keepalive) leave the
+  // Last Will unseen for minutes; 20 s makes broker-side offline detection quick.
+  mqtt_config.session.keepalive = 20;
+  mqtt_config.network.reconnect_timeout_ms = 5000;
+  mqtt_config.network.timeout_ms = 10000;
 
   client_ = esp_mqtt_client_init(&mqtt_config);
   if (client_ == nullptr) {

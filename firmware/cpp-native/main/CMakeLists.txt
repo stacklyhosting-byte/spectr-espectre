@@ -7,6 +7,7 @@ idf_component_register(
         "${SPECTR_VENDOR_CPP}"
     REQUIRES
         espectre
+        spectr_health
         spectr_provisioning
         esp_event
         esp_netif

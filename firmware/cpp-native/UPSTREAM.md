@@ -35,6 +35,10 @@ our GPLv3 corresponding-source obligation together with the published mirror.
 | 2026-10-04 | vendored code | `frontend/ota_protocol.cpp`: `espectre_ota_manifest_url()` points at the Spectr catalog (`https://firmware.spectr.co.za/<channel>/firmware-manifest-<channel>.json`) instead of the ESPectre GitHub releases. |
 | 2026-10-04 | provisioning fix | `components/spectr_provisioning/spectr_provisioning_portal.cpp`: create the default Wi-Fi **station** netif in setup mode (previously only the AP netif existed, so the candidate network associated but never obtained an IP). Firmware 1.0.1. |
 | 2026-10-05 | vendored code | `frontend/native/espectre/native_direct_frontend.cpp`: the Spectr app origin is now `https://devspectr.vercel.app` (Vercel project domain renamed); `https://app.spectr.co.za` stays. Firmware 1.0.4. |
+| 2026-10-09 | vendored code | `runtime/esp_idf/mqtt_transport_esp_idf.cpp`: MQTT keepalive 20 s with 5 s reconnect / 10 s network timeouts, so broker-side Last Will offline detection is fast (defaults were ~2–3 min). |
+| 2026-10-09 | vendored code | `frontend/native/espectre/native_frontend.{h,cpp}`: runtime faults are now also published to MQTT (`fault` topic; previously SSE-only), and public accessors were added for the Spectr Link Health Monitor: `diagnostics()`, `mqtt_connected()`, and `publish_spectr_alert()` which publishes to `<prefix>/<device_id>/events`. |
+| 2026-10-09 | new component | `components/spectr_health/` (Spectr-original, GPLv3): Link Health Monitor — cumulative-delta link-health state machine (healthy/degraded/possible-interference/link-lost) with NVS-buffered MQTT alerts (`jamming_suspected`, `link_lost`, `link_degraded`, `link_restored`, `cloud_link_lost`). Conservative wording; never touches the sensing path. |
+| 2026-10-09 | app entry | `main/app_main.cpp`: instantiate the Link Health Monitor and pump it from the frontend loop task. Firmware 1.1.0. |
 
 ## Re-sync procedure
 

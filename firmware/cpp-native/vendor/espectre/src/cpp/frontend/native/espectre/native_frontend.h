@@ -59,6 +59,11 @@ class NativeFrontend : public IRuntimeListener {
   const RuntimeCapabilities &capabilities() const { return runtime_.capabilities(); }
   bool is_setup_complete() const { return runtime_.is_setup_complete(); }
   size_t direct_client_count() const;
+  // Spectr: health-monitor accessors and alert publishing (Link Health Monitor).
+  RuntimeDiagnosticsSnapshot diagnostics() const { return runtime_.diagnostics(); }
+  bool mqtt_connected() const;
+  /** Publish a Spectr health alert on <prefix>/<device_id>/events. False when MQTT is down. */
+  bool publish_spectr_alert(const std::string &payload);
 
   bool setup();
   void loop();
