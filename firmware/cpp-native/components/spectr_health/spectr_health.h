@@ -46,7 +46,7 @@ class SpectrHealthMonitor {
   void sample_(uint32_t now_ms);
   std::string alert_json_(const char *type, const char *severity, const char *reason,
                           const char *trigger, const char *confidence, uint32_t latency_ms) const;
-  bool publish_or_queue_(const std::string &json);
+  void publish_or_queue_(const std::string &json);
   void queue_(const std::string &json);
   void flush_queue_();
   void open_store_();

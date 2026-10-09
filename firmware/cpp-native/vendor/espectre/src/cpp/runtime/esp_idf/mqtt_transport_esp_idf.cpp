@@ -171,8 +171,15 @@ bool EspIdfMqttTransport::publish_suffix(const char *suffix, const std::string &
   }
   publish_topic_.assign(topic_base_);
   publish_topic_.append(suffix);
-  const bool command_result = std::strcmp(suffix, "commands/result") == 0;
-  return enqueue_publish_(publish_topic_, payload, retain, !command_result);
+  // One-shot messages must never be coalesced with a later message on the same topic.
+  // Marking "events"/"fault" replaceable caused an earlier alert (e.g. link_lost) to be
+  // silently overwritten by a later one (e.g. link_restored) flushed in the same batch,
+  // losing the urgent alert. Only continuously-updated state (health, sensing, motion,
+  // ha/*, ...) stays replaceable.
+  const bool replaceable = std::strcmp(suffix, "commands/result") != 0 &&
+                           std::strcmp(suffix, "events") != 0 &&
+                           std::strcmp(suffix, "fault") != 0;
+  return enqueue_publish_(publish_topic_, payload, retain, replaceable);
 }
 
 MqttTransportDiagnostics EspIdfMqttTransport::diagnostics() const {
@@ -385,8 +392,13 @@ void EspIdfMqttTransport::drain_publish_queue_() {
       esp_mqtt_client_get_outbox_size(client_) >= static_cast<int>(kReplaceableOutboxHighWaterBytes)) {
     return;
   }
+  // Spectr: non-replaceable messages (health alerts, faults, command results) carry
+  // event-critical data that must not be lost. Publish them at QoS 1 with store=true so
+  // esp-mqtt retains and retries them across a reconnect instead of dropping a QoS 0
+  // publish into a session that is still coming up (or already dying).
+  const int qos = pending.replaceable ? 0 : 1;
   const int id = esp_mqtt_client_enqueue(
-      client_, pending.topic.c_str(), pending.payload.c_str(), 0, 0, pending.retain ? 1 : 0, true);
+      client_, pending.topic.c_str(), pending.payload.c_str(), 0, qos, pending.retain ? 1 : 0, true);
   if (id >= 0) {
     pending_publishes_.pop_front();
   } else {

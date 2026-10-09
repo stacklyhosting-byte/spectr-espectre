@@ -337,10 +337,12 @@ std::string SpectrHealthMonitor::alert_json_(const char *type, const char *sever
   return std::string(buffer);
 }
 
-bool SpectrHealthMonitor::publish_or_queue_(const std::string &json) {
-  if (frontend_ != nullptr && frontend_->publish_spectr_alert(json)) return true;
+// Every alert is persisted to the NVS ring first and delivered by the flusher, which
+// only runs while the sensing link is ready AND MQTT is connected. Publishing directly
+// at the moment of a link drop would send the alert into a doomed MQTT outbox (the
+// client still believes it is connected for a few seconds), losing the urgent alert.
+void SpectrHealthMonitor::publish_or_queue_(const std::string &json) {
   queue_(json);
-  return false;
 }
 
 void SpectrHealthMonitor::queue_(const std::string &json) {
@@ -362,11 +364,16 @@ void SpectrHealthMonitor::queue_(const std::string &json) {
   nvs_commit(handle);
   nvs_close(handle);
   count_++;
+  ESP_LOGI(kTag, "alert buffered (count=%u)", static_cast<unsigned>(count_));
 }
 
 void SpectrHealthMonitor::flush_queue_() {
   if (!store_ready_ || count_ == 0) return;
   if (frontend_ == nullptr || !frontend_->mqtt_connected()) return;
+  // Only deliver while the sensing link is healthy. During an AP loss the MQTT client
+  // can still report "connected" for a few seconds; flushing then would lose the alert
+  // into a dead outbox. Wait until the link is genuinely back.
+  if (!frontend_->snapshot().ready_to_publish) return;
   nvs_handle_t handle = 0;
   if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) return;
   while (count_ > 0) {
@@ -382,6 +389,7 @@ void SpectrHealthMonitor::flush_queue_() {
     std::string payload(length - 1, '\0');
     if (nvs_get_str(handle, key, payload.data(), &length) != ESP_OK) break;
     if (!frontend_->publish_spectr_alert(payload)) break;
+    ESP_LOGI(kTag, "alert flushed (count=%u)", static_cast<unsigned>(count_ - 1));
     nvs_erase_key(handle, key);
     head_ = static_cast<uint8_t>((head_ + 1) % kQueueMax);
     count_--;
